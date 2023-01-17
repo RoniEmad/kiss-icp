@@ -23,13 +23,16 @@
 from pathlib import Path
 from typing import Optional
 
+import rospy
 import typer
 
 from kiss_icp.datasets import (
     available_dataloaders,
     sequence_dataloaders,
-    supported_file_extensions,
+    supported_file_extensions
 )
+
+from kiss_icp.datasets.ros import Ros_node
 
 
 def version_callback(value: bool):
@@ -77,13 +80,16 @@ $ kiss_icp_pipeline --dataloader kitti --sequence 07 --visualize <path-to-kitti-
 
 @app.command(help=docstring)
 def kiss_icp_pipeline(
-    data: Path = typer.Argument(
-        ...,
+    data: Path = typer.Option(
+        "test",
+        "--data",
+        "-d",
         help="The data directory used by the specified dataloader",
         show_default=False,
     ),
     dataloader: str = typer.Option(
         "generic",
+        "-dl",
         show_default=False,
         case_sensitive=False,
         autocompletion=available_dataloaders,
@@ -169,23 +175,37 @@ def kiss_icp_pipeline(
     # Lazy-loading for faster CLI
     from kiss_icp.datasets import dataset_factory
     from kiss_icp.pipeline import OdometryPipeline
-
-    OdometryPipeline(
-        dataset=dataset_factory(
-            dataloader=dataloader,
-            data_dir=data,
-            # Additional options
-            sequence=sequence,
-            topic=topic,
-        ),
-        config=config,
-        deskew=deskew,
-        max_range=max_range,
-        visualize=visualize,
-        n_scans=n_scans,
-        jump=jump,
-    ).run().print()
+    print("Running KISS-ICP pipeline...")
+    if dataloader=="ros":
+        print("ros")                #/////////////#
+        rosnode=Ros_node(           #/////////////#
+            topic=topic,            #/////////////#
+            config=config,          #/////////////#
+            deskew=deskew,          #/////////////#
+            max_range=max_range,    #/////////////#
+            visualize=visualize     #/////////////#
+        ).run()                     #/////////////#
+    else:
+        print("not ros")
+        OdometryPipeline(
+            dataset=dataset_factory(
+                dataloader=dataloader,
+                data_dir=data,
+                # Additional options
+                sequence=sequence,
+                topic=topic,
+            ),
+            config=config,
+            deskew=deskew,
+            max_range=max_range,
+            visualize=visualize,
+            n_scans=n_scans,
+            jump=jump,
+        ).run().print()
 
 
 def run():
     app()
+
+if __name__ == "__main__":
+    run()
