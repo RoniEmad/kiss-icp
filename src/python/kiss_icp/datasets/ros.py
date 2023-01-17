@@ -47,7 +47,6 @@ class Ros_node:
         *_,
         **__):
 
-        print("hi i am ros")
         self.topic = topic
         self.node=rospy.init_node('kissicpnode', anonymous=True)
         self.pc2_subscriber = rospy.Subscriber(self.topic, PointCloud2, self.callback)
@@ -62,15 +61,9 @@ class Ros_node:
             visualize=visualize,
             ros=True
         )
-        #print("init done")
-        
-    #def __getitem__(self,idx):
-    #    print("getitem")
-    #    return self.read_point_cloud(self.topic)
 
     def callback(self, msg):
         self.data = msg
-        #print("msg", msg.header)
         dataframe=self.read_point_cloud(self.topic)
         pose = self.odometry_pipeline.run_once(dataframe)
         # TODO: convert pose to odometry message and publish
@@ -80,28 +73,20 @@ class Ros_node:
         #print(self.odometry_pipeline.poses[-1])
 
     def run(self):
-        #print("run")
         rospy.spin()
 
     def read_point_cloud(self, topic: str):
         # TODO: implemnt [idx], expose field_names
         msg = self.data
-        #_, msg, _ = next(self.msgs)
-        #print("msg", msg.header.stamp, msg.header.seq, msg.header.frame_id)
         points = np.array(list(self.pc2.read_points(msg, field_names=["x", "y", "z"])))
 
         t_field = None
-        #print(msg.header,msg.height,msg.width,msg.fields,msg.is_bigendian,msg.point_step,msg.row_step,msg.is_dense)
         for field in msg.fields:
-            #print(field.name, field.datatype, field.offset, field.count)
-            if field.name == "t" or field.name == "timestamp" or field.name == "time":
+            if field.name in ["t", "timestamp", "time"]:
                 t_field = field.name
         timestamps = np.ones(points.shape[0])
-        #print("t_field", t_field)
         if t_field:
             timestamps = np.array(list(self.pc2.read_points(msg, field_names=t_field)))
-            #print("timestamps", timestamps.shape, timestamps)
-            #timestamps = timestamps / np.max(timestamps)
-        #print("timestamps", timestamps.shape, timestamps)
+            timestamps = timestamps / np.max(timestamps) if t_field != "time" else timestamps
 
         return points.astype(np.float64), timestamps#, msg.header
