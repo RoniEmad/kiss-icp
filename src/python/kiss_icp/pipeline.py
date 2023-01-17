@@ -36,50 +36,53 @@ from kiss_icp.tools.progress_bar import get_progress_bar
 from kiss_icp.tools.visualizer import RegistrationVisualizer, StubVisualizer
 
 
-class OdometryPipeline:
-    def __init__(
-        self,
-        dataset,
-        config: Path,
-        deskew: bool = False,
-        max_range: Optional[float] = None,
-        visualize: bool = False,
-        n_scans: int = -1,
+class OdometryPipeline:                     #/////////////#
+    def __init__(                           #/////////////#
+        self,                               #/////////////#
+        dataset,                              
+        config: Path,                       #/////////////#
+        deskew: bool = False,               #/////////////#
+        max_range: Optional[float] = None,  #/////////////#
+        visualize: bool = False,            #/////////////#
+        n_scans: int = -1,  
         jump: int = 0,
-    ):
-        self._dataset = dataset
-        self._n_scans = (
-            len(self._dataset) - jump if n_scans == -1 else min(len(self._dataset) - jump, n_scans)
-        )
-        self._jump = jump
-        self._first = jump
-        self._last = self._jump + self._n_scans
-        self.config: KISSConfig = load_config(config)
-
+        ros: bool = False,                  #/////////////#
+    ):                                      #/////////////#
+        
+        #print("dataset", self._dataset[0],self._dataset)
+        if ros:                             #/////////////#
+            print("ros_wrapper")            #/////////////#
+            self.pb=get_progress_bar(0,-1)  #/////////////#
+        else:
+            self._dataset = dataset
+            self._n_scans = (
+                len(self._dataset) - jump if n_scans == -1 else min(len(self._dataset) - jump, n_scans)
+            )
+            self._jump = jump
+            self._first = jump
+            self._last = self._jump + self._n_scans
+            
+            self.has_gt = hasattr(self._dataset, "gt_poses")
+            self.gt_poses = self._dataset.gt_poses[self._first : self._last] if self.has_gt else None
+            self.dataset_name = self._dataset.__class__.__name__
+            self.dataset_sequence = self._dataset.sequence_id
+        
+        self.config: KISSConfig = load_config(config)       #/////////////#
         # Override defauls according to dataloader specification
-        self.config.data.max_range = max_range if max_range else self.config.data.max_range
-        if self.config.data.max_range < self.config.data.min_range:
-            print("[WARNING] max_range is smaller than min_range, settng min_range to 0.0")
-            self.config.data.min_range = 0.0
+        self.config.data.max_range = max_range if max_range else self.config.data.max_range    #/////////////#
 
         # Pipeline
-        self.odometry = Odometry(config=self.config, deskew=deskew)
+        self.odometry = Odometry(config=self.config, deskew=deskew) #/////////////#
         self.results = PipelineResults()
         self.times = []
-        self.poses = self.odometry.poses
-        self.has_gt = hasattr(self._dataset, "gt_poses")
-        self.gt_poses = self._dataset.gt_poses[self._first : self._last] if self.has_gt else None
-        self.dataset_name = self._dataset.__class__.__name__
-        self.dataset_sequence = (
-            self._dataset.sequence_id
-            if hasattr(self._dataset, "sequence_id")
-            else os.path.basename(self._dataset.data_dir)
-        )
+        self.poses = self.odometry.poses                            #/////////////#
 
+        
         # Visualizer
-        self.visualizer = RegistrationVisualizer() if visualize else StubVisualizer()
-        if hasattr(self._dataset, "use_global_visualizer"):
-            self.visualizer.global_view = self._dataset.use_global_visualizer
+        self.visualizer = RegistrationVisualizer() if visualize else StubVisualizer()   #/////////////#
+        #if (not ros) and hasattr(self._dataset, "use_global_visualizer"):
+        self.visualizer.global_view = True #self._dataset.use_global_visualizer         #/////////////#
+        #    print("self.visualizer.global_view", self.visualizer.global_view)
 
     # Public interface  ------
     def run(self):
@@ -91,10 +94,21 @@ class OdometryPipeline:
         self._write_log()
         return self.results
 
+    def run_once(self,dataframe):           #/////////////#
+        self._run_pipeline_once(dataframe)  #/////////////#
+        return self.poses[-1]               #/////////////#
+
+    def _run_pipeline_once(self,dataframe):                                                 #/////////////#
+        self.pb.update()                                                                    #/////////////#
+        raw_frame, timestamps = dataframe#, header = dataframe                              #/////////////#
+        source, keypoints = self.odometry.register_frame(raw_frame, timestamps)             #/////////////#
+        self.visualizer.update(source, keypoints, self.odometry.local_map, self.poses[-1])  #/////////////#
+
     # Private interface  ------
     def _run_pipeline(self):
         for idx in get_progress_bar(self._first, self._last):
-            raw_frame, timestamps = self._next(idx)
+            #print("idx", idx)
+            raw_frame, timestamps = self._next(idx)#, header = self._next(idx)
             start_time = time.perf_counter_ns()
             source, keypoints = self.odometry.register_frame(raw_frame, timestamps)
             self.times.append(time.perf_counter_ns() - start_time)
@@ -104,11 +118,12 @@ class OdometryPipeline:
         """TODO: re-arrange this logic"""
         dataframe = self._dataset[idx]
         try:
-            frame, timestamps = dataframe
+            frame, timestamps=dataframe #, header = dataframe
+            #("header", header)
         except ValueError:
             frame = dataframe
             timestamps = np.zeros(frame.shape[0])
-        return frame, timestamps
+        return frame, timestamps#, header
 
     @property
     def results_dir(self):
