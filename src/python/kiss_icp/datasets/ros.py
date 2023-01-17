@@ -28,6 +28,7 @@ from typing import List, Optional
 
 import rospy
 from sensor_msgs.msg import PointCloud2
+from nav_msgs.msg import Odometry
 
 from kiss_icp.pipeline import OdometryPipeline
 
@@ -49,8 +50,8 @@ class Ros_node:
         print("hi i am ros")
         self.topic = topic
         self.node=rospy.init_node('kissicpnode', anonymous=True)
-        self.pc2_subscriber = rospy.Subscriber(self.topic, PointCloud2, self.callback, queue_size=1000)
-        self.odom_publisher = rospy.Publisher('/odom_test', PointCloud2, queue_size=10)
+        self.pc2_subscriber = rospy.Subscriber(self.topic, PointCloud2, self.callback)
+        self.odom_publisher = rospy.Publisher('/odom_test', Odometry, queue_size=10)
         self.pc2 = importlib.import_module("sensor_msgs.point_cloud2")
         
         self.odometry_pipeline = OdometryPipeline(
@@ -70,9 +71,12 @@ class Ros_node:
     def callback(self, msg):
         self.data = msg
         #print("msg", msg.header)
-        self.odom_publisher.publish(msg)
         dataframe=self.read_point_cloud(self.topic)
         pose = self.odometry_pipeline.run_once(dataframe)
+        # TODO: convert pose to odometry message and publish
+        #odometry = Odometry()
+        #self.odom_publisher.publish(odometry)
+        
         #print(self.odometry_pipeline.poses[-1])
 
     def run(self):
